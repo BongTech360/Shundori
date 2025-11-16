@@ -1,0 +1,21 @@
+# Railway ignore file
+nodejs/
+.git/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv
+*.log
+exports/
+.env
+.env.local
+*.md
+tests/
+*.sh
+docker-compose.yml
+railway-env-vars.txt
+

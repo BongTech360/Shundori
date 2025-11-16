@@ -1,0 +1,27 @@
+{
+  "name": "telegram-attendance-bot-nodejs",
+  "version": "1.0.0",
+  "description": "Telegram attendance bot - Node.js implementation",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "test": "jest",
+    "dev": "nodemon bot.js"
+  },
+  "keywords": ["telegram", "bot", "attendance"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "telegraf": "^4.15.0",
+    "node-cron": "^3.0.3",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1",
+    "moment-timezone": "^0.5.43",
+    "csv-writer": "^1.6.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2"
+  }
+}
+
