@@ -130,40 +130,71 @@ def export_daily_csv(report_date: date = None, output_dir: str = 'exports') -> s
     if report_date is None:
         report_date = get_phnom_penh_date()
     
-    os.makedirs(output_dir, exist_ok=True)
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+    except OSError as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to create exports directory: {e}")
+        raise
     
-    with get_db() as db:
-        users = db.query(User).filter(User.is_active == True).all()
-        fine_amount = get_fine_amount()
+    try:
+        with get_db() as db:
+            users = db.query(User).filter(User.is_active == True).all()
+            fine_amount = get_fine_amount()
+            
+            records = []
+            for user in users:
+                if not user or not user.id:
+                    continue
+                
+                try:
+                    record = db.query(AttendanceRecord).filter(
+                        AttendanceRecord.user_id == user.id,
+                        AttendanceRecord.date == report_date
+                    ).first()
+                    
+                    fine = db.query(Fine).filter(
+                        Fine.user_id == user.id,
+                        Fine.date == report_date
+                    ).first()
+                    
+                    timestamp_str = ''
+                    if record and record.timestamp:
+                        try:
+                            timestamp_str = record.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                        except (AttributeError, TypeError):
+                            timestamp_str = ''
+                    
+                    records.append({
+                        'Date': report_date.strftime('%Y-%m-%d'),
+                        'Telegram ID': user.telegram_id or '',
+                        'Username': user.username or '',
+                        'Full Name': user.full_name or '',
+                        'Status': record.status if record else 'absent',
+                        'Timestamp': timestamp_str,
+                        'Fine Amount': fine.amount if fine else (fine_amount if not record or record.status != 'present' else 0)
+                    })
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Error processing user {user.telegram_id if user else 'unknown'} for CSV: {e}")
+                    continue
         
-        records = []
-        for user in users:
-            record = db.query(AttendanceRecord).filter(
-                AttendanceRecord.user_id == user.id,
-                AttendanceRecord.date == report_date
-            ).first()
-            
-            fine = db.query(Fine).filter(
-                Fine.user_id == user.id,
-                Fine.date == report_date
-            ).first()
-            
-            records.append({
-                'Date': report_date.strftime('%Y-%m-%d'),
-                'Telegram ID': user.telegram_id,
-                'Username': user.username or '',
-                'Full Name': user.full_name or '',
-                'Status': record.status if record else 'absent',
-                'Timestamp': record.timestamp.strftime('%Y-%m-%d %H:%M:%S') if record and record.timestamp else '',
-                'Fine Amount': fine.amount if fine else (fine_amount if not record or record.status != 'present' else 0)
-            })
-    
-    df = pd.DataFrame(records)
-    filename = f"attendance_{report_date.strftime('%Y%m%d')}.csv"
-    filepath = os.path.join(output_dir, filename)
-    df.to_csv(filepath, index=False)
-    
-    return filepath
+        if not records:
+            raise ValueError("No records to export")
+        
+        df = pd.DataFrame(records)
+        filename = f"attendance_{report_date.strftime('%Y%m%d')}.csv"
+        filepath = os.path.join(output_dir, filename)
+        df.to_csv(filepath, index=False)
+        
+        return filepath
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error exporting daily CSV: {e}", exc_info=True)
+        raise
 
 
 def export_monthly_csv(year: int, month: int, output_dir: str = 'exports') -> str:

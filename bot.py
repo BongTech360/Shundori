@@ -58,242 +58,320 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_attendance_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle '1' message for attendance."""
-    # Only process in group chats
-    if update.message.chat.type not in ['group', 'supergroup']:
-        return
-    
-    # Store group chat ID
-    set_group_chat_id(update.message.chat.id)
-    
-    # Check if message is exactly "1"
-    if update.message.text.strip() != '1':
-        return
-    
-    # Check if window is open
-    if not get_attendance_window_status():
-        await update.message.reply_text(
-            "⏰ Attendance window is closed. Please send '1' between 09:00 and 10:00 AM."
-        )
-        return
-    
-    user = update.effective_user
-    telegram_id = user.id
-    username = user.username
-    full_name = user.full_name or f"{user.first_name} {user.last_name or ''}".strip()
-    
-    # Record attendance
-    success, message = record_attendance(
-        telegram_id, 
-        update.message.date,
-        username=username,
-        full_name=full_name
-    )
-    
-    if success:
-        # Send greeting in private chat
-        try:
-            await context.bot.send_message(
-                chat_id=telegram_id,
-                text=f"Good morning, {full_name}! {message}"
+    try:
+        # Safety checks
+        if not update or not update.message:
+            return
+        
+        # Only process in group chats
+        if update.message.chat.type not in ['group', 'supergroup']:
+            return
+        
+        # Store group chat ID
+        set_group_chat_id(update.message.chat.id)
+        
+        # Check if message is exactly "1"
+        if not update.message.text or update.message.text.strip() != '1':
+            return
+        
+        # Check if window is open
+        if not get_attendance_window_status():
+            await update.message.reply_text(
+                "⏰ Attendance window is closed. Please send '1' between 09:00 and 10:00 AM."
             )
-        except TelegramError as e:
-            logger.warning(f"Could not send private message to {telegram_id}: {e}")
-            # Still record attendance, just notify admin
+            return
+        
+        user = update.effective_user
+        if not user:
+            logger.warning("No user found in update")
+            return
+        
+        telegram_id = user.id
+        username = user.username
+        full_name = user.full_name or f"{user.first_name} {user.last_name or ''}".strip()
+        
+        # Record attendance
+        try:
+            success, message = record_attendance(
+                telegram_id, 
+                update.message.date,
+                username=username,
+                full_name=full_name
+            )
+        except Exception as e:
+            logger.error(f"Error recording attendance for {telegram_id}: {e}")
+            await update.message.reply_text("❌ An error occurred while recording attendance. Please try again.")
+            return
+        
+        if success:
+            # Send greeting in private chat
             try:
                 await context.bot.send_message(
-                    chat_id=ADMIN_ID,
-                    text=f"⚠️ Could not send greeting to {full_name} (ID: {telegram_id}). Attendance still recorded."
+                    chat_id=telegram_id,
+                    text=f"Good morning, {full_name}! {message}"
                 )
-            except Exception as admin_error:
-                logger.error(f"Could not notify admin: {admin_error}")
-    else:
-        await update.message.reply_text(message)
+            except TelegramError as e:
+                logger.warning(f"Could not send private message to {telegram_id}: {e}")
+                # Still record attendance, just notify admin
+                try:
+                    await context.bot.send_message(
+                        chat_id=ADMIN_ID,
+                        text=f"⚠️ Could not send greeting to {full_name} (ID: {telegram_id}). Attendance still recorded."
+                    )
+                except Exception as admin_error:
+                    logger.error(f"Could not notify admin: {admin_error}")
+        else:
+            await update.message.reply_text(message)
+    except Exception as e:
+        logger.error(f"Unexpected error in handle_attendance_message: {e}", exc_info=True)
+        try:
+            if update and update.message:
+                await update.message.reply_text("❌ An error occurred. Please try again later.")
+        except:
+            pass
 
 
 async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /report command."""
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-    
-    # Parse date from command
-    report_date = get_phnom_penh_date()
-    if context.args:
-        try:
-            report_date = datetime.strptime(context.args[0], '%Y-%m-%d').date()
-        except ValueError:
-            await update.message.reply_text("❌ Invalid date format. Use YYYY-MM-DD")
+    try:
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("❌ You are not authorized to use this command.")
             return
-    
-    report = generate_daily_report(report_date)
-    message = format_daily_report_message(report, include_running_fines=True)
-    
-    await update.message.reply_text(message)
+        
+        # Parse date from command
+        report_date = get_phnom_penh_date()
+        if context.args:
+            try:
+                report_date = datetime.strptime(context.args[0], '%Y-%m-%d').date()
+            except ValueError:
+                await update.message.reply_text("❌ Invalid date format. Use YYYY-MM-DD")
+                return
+        
+        try:
+            report = generate_daily_report(report_date)
+            message = format_daily_report_message(report, include_running_fines=True)
+            await update.message.reply_text(message)
+        except Exception as e:
+            logger.error(f"Error generating report: {e}", exc_info=True)
+            await update.message.reply_text("❌ An error occurred while generating the report.")
+    except Exception as e:
+        logger.error(f"Unexpected error in report_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ An error occurred. Please try again later.")
+        except:
+            pass
 
 
 async def monthly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /monthly command."""
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-    
-    # Parse month from command
-    if not context.args:
-        await update.message.reply_text("❌ Please provide month in YYYY-MM format.")
-        return
-    
     try:
-        year, month = map(int, context.args[0].split('-'))
-    except ValueError:
-        await update.message.reply_text("❌ Invalid date format. Use YYYY-MM")
-        return
-    
-    try:
-        filepath = export_monthly_csv(year, month)
-        with open(filepath, 'rb') as f:
-            await update.message.reply_document(
-                document=f,
-                filename=os.path.basename(filepath),
-                caption=f"Monthly report for {year}-{month:02d}"
-            )
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("❌ You are not authorized to use this command.")
+            return
+        
+        # Parse month from command
+        if not context.args:
+            await update.message.reply_text("❌ Please provide month in YYYY-MM format.")
+            return
+        
+        try:
+            year, month = map(int, context.args[0].split('-'))
+        except ValueError:
+            await update.message.reply_text("❌ Invalid date format. Use YYYY-MM")
+            return
+        
+        try:
+            filepath = export_monthly_csv(year, month)
+            with open(filepath, 'rb') as f:
+                await update.message.reply_document(
+                    document=f,
+                    filename=os.path.basename(filepath),
+                    caption=f"Monthly report for {year}-{month:02d}"
+                )
+        except Exception as e:
+            logger.error(f"Error generating monthly report: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Error generating report: {str(e)}")
     except Exception as e:
-        logger.error(f"Error generating monthly report: {e}")
-        await update.message.reply_text(f"❌ Error generating report: {str(e)}")
+        logger.error(f"Unexpected error in monthly_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ An error occurred. Please try again later.")
+        except:
+            pass
 
 
 async def setfine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /setfine command."""
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-    
-    if not context.args:
-        await update.message.reply_text("❌ Please provide fine amount. Usage: /setfine <amount>")
-        return
-    
     try:
-        amount = float(context.args[0])
-        if amount < 0:
-            raise ValueError("Fine amount must be positive")
-    except ValueError:
-        await update.message.reply_text("❌ Invalid amount. Please provide a positive number.")
-        return
-    
-    with get_db() as db:
-        setting = db.query(Settings).filter(Settings.key == 'fine_amount').first()
-        if setting:
-            setting.value = str(amount)
-        else:
-            setting = Settings(key='fine_amount', value=str(amount))
-            db.add(setting)
-        db.commit()
-    
-    await update.message.reply_text(f"✅ Fine amount set to ${amount:.2f}")
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("❌ You are not authorized to use this command.")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Please provide fine amount. Usage: /setfine <amount>")
+            return
+        
+        try:
+            amount = float(context.args[0])
+            if amount < 0:
+                raise ValueError("Fine amount must be positive")
+        except ValueError:
+            await update.message.reply_text("❌ Invalid amount. Please provide a positive number.")
+            return
+        
+        try:
+            with get_db() as db:
+                setting = db.query(Settings).filter(Settings.key == 'fine_amount').first()
+                if setting:
+                    setting.value = str(amount)
+                else:
+                    setting = Settings(key='fine_amount', value=str(amount))
+                    db.add(setting)
+                db.commit()
+            
+            await update.message.reply_text(f"✅ Fine amount set to ${amount:.2f}")
+        except Exception as e:
+            logger.error(f"Error setting fine amount: {e}", exc_info=True)
+            await update.message.reply_text("❌ An error occurred while setting the fine amount.")
+    except Exception as e:
+        logger.error(f"Unexpected error in setfine_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ An error occurred. Please try again later.")
+        except:
+            pass
 
 
 async def set_window_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /set-window command."""
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-    
-    if len(context.args) < 2:
-        await update.message.reply_text("❌ Usage: /set-window <HH:MM> <HH:MM>")
-        return
-    
     try:
-        start_time = datetime.strptime(context.args[0], '%H:%M').time()
-        end_time = datetime.strptime(context.args[1], '%H:%M').time()
-    except ValueError:
-        await update.message.reply_text("❌ Invalid time format. Use HH:MM")
-        return
-    
-    with get_db() as db:
-        # Store in settings
-        start_setting = db.query(Settings).filter(Settings.key == 'window_start').first()
-        if start_setting:
-            start_setting.value = context.args[0]
-        else:
-            start_setting = Settings(key='window_start', value=context.args[0])
-            db.add(start_setting)
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("❌ You are not authorized to use this command.")
+            return
         
-        end_setting = db.query(Settings).filter(Settings.key == 'window_end').first()
-        if end_setting:
-            end_setting.value = context.args[1]
-        else:
-            end_setting = Settings(key='window_end', value=context.args[1])
-            db.add(end_setting)
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Usage: /set-window <HH:MM> <HH:MM>")
+            return
         
-        db.commit()
-    
-    # Update scheduler with new times
-    try:
-        from scheduler import update_scheduler_jobs, _scheduler_instance
-        if _scheduler_instance and _scheduler_instance.running:
-            update_scheduler_jobs(_scheduler_instance)
-            logger.info("Scheduler updated with new window times")
+        try:
+            start_time = datetime.strptime(context.args[0], '%H:%M').time()
+            end_time = datetime.strptime(context.args[1], '%H:%M').time()
+        except ValueError:
+            await update.message.reply_text("❌ Invalid time format. Use HH:MM")
+            return
+        
+        try:
+            with get_db() as db:
+                # Store in settings
+                start_setting = db.query(Settings).filter(Settings.key == 'window_start').first()
+                if start_setting:
+                    start_setting.value = context.args[0]
+                else:
+                    start_setting = Settings(key='window_start', value=context.args[0])
+                    db.add(start_setting)
+                
+                end_setting = db.query(Settings).filter(Settings.key == 'window_end').first()
+                if end_setting:
+                    end_setting.value = context.args[1]
+                else:
+                    end_setting = Settings(key='window_end', value=context.args[1])
+                    db.add(end_setting)
+                
+                db.commit()
+            
+            # Update scheduler with new times
+            try:
+                from scheduler import update_scheduler_jobs, _scheduler_instance
+                if _scheduler_instance and _scheduler_instance.running:
+                    update_scheduler_jobs(_scheduler_instance)
+                    logger.info("Scheduler updated with new window times")
+            except Exception as e:
+                logger.warning(f"Could not update scheduler: {e}")
+            
+            await update.message.reply_text(
+                f"✅ Attendance window set to {context.args[0]} - {context.args[1]}. Scheduler will use new times from tomorrow."
+            )
+        except Exception as e:
+            logger.error(f"Error setting window: {e}", exc_info=True)
+            await update.message.reply_text("❌ An error occurred while setting the window.")
     except Exception as e:
-        logger.warning(f"Could not update scheduler: {e}")
-    
-    await update.message.reply_text(
-        f"✅ Attendance window set to {context.args[0]} - {context.args[1]}. Scheduler will use new times from tomorrow."
-    )
+        logger.error(f"Unexpected error in set_window_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ An error occurred. Please try again later.")
+        except:
+            pass
 
 
 async def force_mark_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /force-mark command."""
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-    
-    if len(context.args) < 2:
-        await update.message.reply_text("❌ Usage: /force-mark <user_id> present|absent")
-        return
-    
     try:
-        user_id = int(context.args[0])
-        status = context.args[1].lower()
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("❌ You are not authorized to use this command.")
+            return
         
-        if status not in ['present', 'absent']:
-            raise ValueError("Status must be 'present' or 'absent'")
-    except (ValueError, IndexError):
-        await update.message.reply_text("❌ Invalid arguments. Usage: /force-mark <user_id> present|absent")
-        return
-    
-    success = force_mark_attendance(user_id, status)
-    
-    if success:
-        await update.message.reply_text(f"✅ Attendance marked as {status} for user {user_id}")
-    else:
-        await update.message.reply_text(f"❌ User {user_id} not found")
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Usage: /force-mark <user_id> present|absent")
+            return
+        
+        try:
+            user_id = int(context.args[0])
+            status = context.args[1].lower()
+            
+            if status not in ['present', 'absent']:
+                raise ValueError("Status must be 'present' or 'absent'")
+        except (ValueError, IndexError):
+            await update.message.reply_text("❌ Invalid arguments. Usage: /force-mark <user_id> present|absent")
+            return
+        
+        try:
+            success = force_mark_attendance(user_id, status)
+            
+            if success:
+                await update.message.reply_text(f"✅ Attendance marked as {status} for user {user_id}")
+            else:
+                await update.message.reply_text(f"❌ User {user_id} not found")
+        except Exception as e:
+            logger.error(f"Error in force_mark_attendance: {e}", exc_info=True)
+            await update.message.reply_text("❌ An error occurred while marking attendance.")
+    except Exception as e:
+        logger.error(f"Unexpected error in force_mark_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ An error occurred. Please try again later.")
+        except:
+            pass
 
 
 async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /export command."""
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-    
-    # Parse date from command
-    export_date = get_phnom_penh_date()
-    if context.args:
-        try:
-            export_date = datetime.strptime(context.args[0], '%Y-%m-%d').date()
-        except ValueError:
-            await update.message.reply_text("❌ Invalid date format. Use YYYY-MM-DD")
-            return
-    
     try:
-        filepath = export_daily_csv(export_date)
-        with open(filepath, 'rb') as f:
-            await update.message.reply_document(
-                document=f,
-                filename=os.path.basename(filepath),
-                caption=f"Daily attendance report for {export_date}"
-            )
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("❌ You are not authorized to use this command.")
+            return
+        
+        # Parse date from command
+        export_date = get_phnom_penh_date()
+        if context.args:
+            try:
+                export_date = datetime.strptime(context.args[0], '%Y-%m-%d').date()
+            except ValueError:
+                await update.message.reply_text("❌ Invalid date format. Use YYYY-MM-DD")
+                return
+        
+        try:
+            filepath = export_daily_csv(export_date)
+            with open(filepath, 'rb') as f:
+                await update.message.reply_document(
+                    document=f,
+                    filename=os.path.basename(filepath),
+                    caption=f"Daily attendance report for {export_date}"
+                )
+        except Exception as e:
+            logger.error(f"Error exporting CSV: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Error exporting CSV: {str(e)}")
     except Exception as e:
-        logger.error(f"Error exporting CSV: {e}")
-        await update.message.reply_text(f"❌ Error exporting CSV: {str(e)}")
+        logger.error(f"Unexpected error in export_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ An error occurred. Please try again later.")
+        except:
+            pass
 
 
 def setup_handlers(application: Application):
@@ -318,16 +396,33 @@ async def post_init(application: Application):
     global bot_instance
     bot_instance = application
     
-    # Initialize database
-    from database import init_db
-    init_db()
-    
-    # Setup scheduler
-    from scheduler import setup_scheduler, set_bot_instance
-    set_bot_instance(application)
-    scheduler = setup_scheduler()
-    
-    logger.info("Bot initialized successfully")
+    try:
+        # Initialize database
+        from database import init_db
+        try:
+            init_db()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}", exc_info=True)
+            # Don't crash - bot can still run, but database operations will fail
+            logger.warning("Bot will continue but database operations may fail")
+        
+        # Setup scheduler
+        try:
+            from scheduler import setup_scheduler, set_bot_instance
+            set_bot_instance(application)
+            scheduler = setup_scheduler()
+            logger.info("Scheduler initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to setup scheduler: {e}", exc_info=True)
+            # Don't crash - bot can still run without scheduler
+            logger.warning("Bot will continue but scheduled tasks may not work")
+        
+        logger.info("Bot initialized successfully")
+    except Exception as e:
+        logger.error(f"Error in post_init: {e}", exc_info=True)
+        # Don't raise - let bot start anyway
+        logger.warning("Bot initialized with errors - some features may not work")
 
 
 def main():

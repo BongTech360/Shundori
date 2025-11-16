@@ -49,57 +49,73 @@ def set_attendance_window_status(status: bool):
 
 async def open_attendance_window():
     """Open attendance window at 09:00 AM."""
-    set_attendance_window_status(True)
-    logger.info("Attendance window opened at 09:00 AM")
-    
-    if group_chat_id and bot_instance:
-        try:
-            await bot_instance.bot.send_message(
-                chat_id=group_chat_id,
-                text="✅ Attendance window is now open! Send '1' to record your attendance."
-            )
-        except Exception as e:
-            logger.error(f"Failed to send window open message: {e}")
+    try:
+        set_attendance_window_status(True)
+        logger.info("Attendance window opened at 09:00 AM")
+        
+        if group_chat_id and bot_instance and bot_instance.bot:
+            try:
+                await bot_instance.bot.send_message(
+                    chat_id=group_chat_id,
+                    text="✅ Attendance window is now open! Send '1' to record your attendance."
+                )
+            except Exception as e:
+                logger.error(f"Failed to send window open message: {e}")
+        else:
+            logger.warning("Cannot send window open message: bot_instance or group_chat_id not set")
+    except Exception as e:
+        logger.error(f"Error in open_attendance_window: {e}", exc_info=True)
 
 
 async def close_attendance_window():
     """Close attendance window at 10:00 AM and process attendance."""
-    set_attendance_window_status(False)
-    logger.info("Attendance window closed at 10:00 AM")
-    
-    # Process attendance for all members
-    process_daily_attendance()
-    
-    if group_chat_id and bot_instance:
+    try:
+        set_attendance_window_status(False)
+        logger.info("Attendance window closed at 10:00 AM")
+        
+        # Process attendance for all members
         try:
-            await bot_instance.bot.send_message(
-                chat_id=group_chat_id,
-                text="⏰ Attendance window is now closed. Processing attendance..."
-            )
+            process_daily_attendance()
         except Exception as e:
-            logger.error(f"Failed to send window close message: {e}")
+            logger.error(f"Error processing daily attendance: {e}", exc_info=True)
+        
+        if group_chat_id and bot_instance and bot_instance.bot:
+            try:
+                await bot_instance.bot.send_message(
+                    chat_id=group_chat_id,
+                    text="⏰ Attendance window is now closed. Processing attendance..."
+                )
+            except Exception as e:
+                logger.error(f"Failed to send window close message: {e}")
+        else:
+            logger.warning("Cannot send window close message: bot_instance or group_chat_id not set")
+    except Exception as e:
+        logger.error(f"Error in close_attendance_window: {e}", exc_info=True)
 
 
 async def send_daily_report():
     """Send daily report at 10:05 AM."""
-    logger.info("Generating daily report")
-    
-    if not group_chat_id or not bot_instance:
-        logger.warning("Group chat ID or bot instance not set, cannot send daily report")
-        return
-    
     try:
-        report = generate_daily_report()
-        message = format_daily_report_message(report, include_running_fines=False)
+        logger.info("Generating daily report")
         
-        await bot_instance.bot.send_message(
-            chat_id=group_chat_id,
-            text=message
-        )
+        if not group_chat_id or not bot_instance or not bot_instance.bot:
+            logger.warning("Group chat ID or bot instance not set, cannot send daily report")
+            return
         
-        logger.info("Daily report sent successfully")
+        try:
+            report = generate_daily_report()
+            message = format_daily_report_message(report, include_running_fines=False)
+            
+            await bot_instance.bot.send_message(
+                chat_id=group_chat_id,
+                text=message
+            )
+            
+            logger.info("Daily report sent successfully")
+        except Exception as e:
+            logger.error(f"Failed to send daily report: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"Failed to send daily report: {e}")
+        logger.error(f"Error in send_daily_report: {e}", exc_info=True)
 
 
 # Global scheduler instance

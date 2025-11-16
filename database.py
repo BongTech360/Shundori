@@ -54,7 +54,15 @@ def get_client() -> MongoClient:
     """Get or create MongoDB client."""
     global _client
     if _client is None:
-        _client = MongoClient(MONGODB_URI)
+        try:
+            _client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+            # Test connection
+            _client.admin.command('ping')
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to connect to MongoDB: {e}")
+            raise ConnectionError(f"Cannot connect to MongoDB at {MONGODB_URI}. Please check your connection string and ensure MongoDB is running.")
     return _client
 
 
@@ -62,8 +70,14 @@ def get_database() -> Database:
     """Get or create database instance."""
     global _db
     if _db is None:
-        client = get_client()
-        _db = client[DATABASE_NAME]
+        try:
+            client = get_client()
+            _db = client[DATABASE_NAME]
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to get database: {e}")
+            raise
     return _db
 
 

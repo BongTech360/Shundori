@@ -11,29 +11,48 @@ from reports import get_fine_amount
 
 def get_or_create_user(telegram_id: int, username: str = None, full_name: str = None) -> User:
     """Get or create a user in the database."""
-    with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == telegram_id).first()
-        if not user:
-            user = User(
-                telegram_id=telegram_id,
-                username=username,
-                full_name=full_name
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        else:
-            # Update user info if provided
-            updated = False
-            if username and user.username != username:
-                user.username = username
-                updated = True
-            if full_name and user.full_name != full_name:
-                user.full_name = full_name
-                updated = True
-            if updated:
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        with get_db() as db:
+            user = db.query(User).filter(User.telegram_id == telegram_id).first()
+            if not user:
+                user = User(
+                    telegram_id=telegram_id,
+                    username=username,
+                    full_name=full_name
+                )
+                db.add(user)
                 db.commit()
-        return user
+                db.refresh(user)
+                
+                # Ensure user has an ID after creation
+                if not user.id:
+                    logger.error(f"User created but has no ID: {telegram_id}")
+                    raise ValueError("Failed to create user - no ID assigned")
+            else:
+                # Update user info if provided
+                updated = False
+                if username and user.username != username:
+                    user.username = username
+                    updated = True
+                if full_name and user.full_name != full_name:
+                    user.full_name = full_name
+                    updated = True
+                if updated:
+                    db.commit()
+                    db.refresh(user)
+            
+            # Final check
+            if not user.id:
+                logger.error(f"User has no ID after get_or_create: {telegram_id}")
+                raise ValueError("User has no ID")
+            
+            return user
+    except Exception as e:
+        logger.error(f"Error in get_or_create_user for {telegram_id}: {e}", exc_info=True)
+        raise
 
 
 def record_attendance(telegram_id: int, timestamp: datetime = None, username: str = None, full_name: str = None) -> tuple[bool, str]:
@@ -41,57 +60,68 @@ def record_attendance(telegram_id: int, timestamp: datetime = None, username: st
     Record attendance for a user.
     Returns (success, message)
     """
-    if timestamp is None:
-        timestamp = get_phnom_penh_now()
+    import logging
+    logger = logging.getLogger(__name__)
     
-    # Check if window is open
-    if not is_attendance_window_open():
-        return False, "Attendance window is closed. Please send '1' between 09:00 and 10:00 AM."
-    
-    current_date = get_phnom_penh_date()
-    
-    # Get or create user first (outside transaction to avoid nested contexts)
-    user = get_or_create_user(telegram_id, username=username, full_name=full_name)
-    
-    with get_db() as db:
-        # Check if already recorded for today
-        existing = db.query(AttendanceRecord).filter(
-            AttendanceRecord.user_id == user.id,
-            AttendanceRecord.date == current_date
-        ).first()
+    try:
+        if timestamp is None:
+            timestamp = get_phnom_penh_now()
         
-        if existing:
-            return False, "You have already recorded your attendance for today."
+        # Check if window is open
+        if not is_attendance_window_open():
+            return False, "Attendance window is closed. Please send '1' between 09:00 and 10:00 AM."
         
-        # Check if before deadline
-        is_on_time = is_before_deadline(timestamp)
-        status = 'present' if is_on_time else 'late'
+        current_date = get_phnom_penh_date()
         
-        # Create attendance record
-        record = AttendanceRecord(
-            user_id=user.id,
-            date=current_date,
-            status=status,
-            timestamp=timestamp
-        )
-        db.add(record)
+        # Get or create user first (outside transaction to avoid nested contexts)
+        user = get_or_create_user(telegram_id, username=username, full_name=full_name)
         
-        # If late, create fine
-        if not is_on_time:
-            fine_amount = get_fine_amount()
-            fine = Fine(
+        if not user or not user.id:
+            logger.error(f"User has no ID after get_or_create_user: {telegram_id}")
+            return False, "An error occurred. Please try again."
+        
+        with get_db() as db:
+            # Check if already recorded for today
+            existing = db.query(AttendanceRecord).filter(
+                AttendanceRecord.user_id == user.id,
+                AttendanceRecord.date == current_date
+            ).first()
+            
+            if existing:
+                return False, "You have already recorded your attendance for today."
+            
+            # Check if before deadline
+            is_on_time = is_before_deadline(timestamp)
+            status = 'present' if is_on_time else 'late'
+            
+            # Create attendance record
+            record = AttendanceRecord(
                 user_id=user.id,
                 date=current_date,
-                amount=fine_amount
+                status=status,
+                timestamp=timestamp
             )
-            db.add(fine)
-        
-        db.commit()
-        
-        if is_on_time:
-            return True, "Good morning! Attendance recorded."
-        else:
-            return True, "Attendance recorded, but you were late. A fine has been applied."
+            db.add(record)
+            
+            # If late, create fine
+            if not is_on_time:
+                fine_amount = get_fine_amount()
+                fine = Fine(
+                    user_id=user.id,
+                    date=current_date,
+                    amount=fine_amount
+                )
+                db.add(fine)
+            
+            db.commit()
+            
+            if is_on_time:
+                return True, "Good morning! Attendance recorded."
+            else:
+                return True, "Attendance recorded, but you were late. A fine has been applied."
+    except Exception as e:
+        logger.error(f"Error recording attendance for {telegram_id}: {e}", exc_info=True)
+        return False, "An error occurred while recording attendance. Please try again."
 
 
 def process_daily_attendance():
@@ -99,39 +129,54 @@ def process_daily_attendance():
     Process attendance for all members at 10:00 AM.
     Mark absent members and apply fines.
     """
-    current_date = get_phnom_penh_date()
-    fine_amount = get_fine_amount()
+    import logging
+    logger = logging.getLogger(__name__)
     
-    with get_db() as db:
-        # Get all active users
-        users = db.query(User).filter(User.is_active == True).all()
+    try:
+        current_date = get_phnom_penh_date()
+        fine_amount = get_fine_amount()
         
-        for user in users:
-            # Check if user has attendance record for today
-            record = db.query(AttendanceRecord).filter(
-                AttendanceRecord.user_id == user.id,
-                AttendanceRecord.date == current_date
-            ).first()
+        with get_db() as db:
+            # Get all active users
+            users = db.query(User).filter(User.is_active == True).all()
             
-            if not record:
-                # Mark as absent
-                record = AttendanceRecord(
-                    user_id=user.id,
-                    date=current_date,
-                    status='absent',
-                    timestamp=None
-                )
-                db.add(record)
+            for user in users:
+                if not user or not user.id:
+                    logger.warning(f"Skipping user without ID: {user.telegram_id if user else 'unknown'}")
+                    continue
                 
-                # Apply fine
-                fine = Fine(
-                    user_id=user.id,
-                    date=current_date,
-                    amount=fine_amount
-                )
-                db.add(fine)
-        
-        db.commit()
+                try:
+                    # Check if user has attendance record for today
+                    record = db.query(AttendanceRecord).filter(
+                        AttendanceRecord.user_id == user.id,
+                        AttendanceRecord.date == current_date
+                    ).first()
+                    
+                    if not record:
+                        # Mark as absent
+                        record = AttendanceRecord(
+                            user_id=user.id,
+                            date=current_date,
+                            status='absent',
+                            timestamp=None
+                        )
+                        db.add(record)
+                        
+                        # Apply fine
+                        fine = Fine(
+                            user_id=user.id,
+                            date=current_date,
+                            amount=fine_amount
+                        )
+                        db.add(fine)
+                except Exception as e:
+                    logger.error(f"Error processing attendance for user {user.telegram_id if user else 'unknown'}: {e}")
+                    continue
+            
+            db.commit()
+    except Exception as e:
+        logger.error(f"Error in process_daily_attendance: {e}", exc_info=True)
+        raise
 
 
 def force_mark_attendance(telegram_id: int, status: str, target_date: date = None) -> bool:
