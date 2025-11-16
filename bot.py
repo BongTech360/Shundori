@@ -241,14 +241,14 @@ async def setfine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def set_window_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /set-window command."""
+    """Handle /setwindow command."""
     try:
         if not is_admin(update.effective_user.id):
             await update.message.reply_text("❌ You are not authorized to use this command.")
             return
         
         if len(context.args) < 2:
-            await update.message.reply_text("❌ Usage: /set-window <HH:MM> <HH:MM>")
+            await update.message.reply_text("❌ Usage: /setwindow <HH:MM> <HH:MM>")
             return
         
         try:
@@ -301,14 +301,14 @@ async def set_window_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def force_mark_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /force-mark command."""
+    """Handle /forcemark command."""
     try:
         if not is_admin(update.effective_user.id):
             await update.message.reply_text("❌ You are not authorized to use this command.")
             return
         
         if len(context.args) < 2:
-            await update.message.reply_text("❌ Usage: /force-mark <user_id> present|absent")
+            await update.message.reply_text("❌ Usage: /forcemark <user_id> present|absent")
             return
         
         try:
@@ -318,7 +318,7 @@ async def force_mark_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if status not in ['present', 'absent']:
                 raise ValueError("Status must be 'present' or 'absent'")
         except (ValueError, IndexError):
-            await update.message.reply_text("❌ Invalid arguments. Usage: /force-mark <user_id> present|absent")
+            await update.message.reply_text("❌ Invalid arguments. Usage: /forcemark <user_id> present|absent")
             return
         
         try:
@@ -381,8 +381,8 @@ def setup_handlers(application: Application):
     application.add_handler(CommandHandler("report", report_command))
     application.add_handler(CommandHandler("monthly", monthly_command))
     application.add_handler(CommandHandler("setfine", setfine_command))
-    application.add_handler(CommandHandler("set-window", set_window_command))
-    application.add_handler(CommandHandler("force-mark", force_mark_command))
+    application.add_handler(CommandHandler("setwindow", set_window_command))
+    application.add_handler(CommandHandler("forcemark", force_mark_command))
     application.add_handler(CommandHandler("export", export_command))
     
     # Message handler for attendance
