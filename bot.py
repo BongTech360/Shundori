@@ -15,6 +15,10 @@ from datetime import datetime, date
 import os
 from dotenv import load_dotenv
 
+# Load environment variables early (before importing config)
+# This ensures .env file is loaded if it exists, but won't override system env vars
+load_dotenv(override=False)
+
 from config import BOT_TOKEN, ADMIN_ID
 from attendance import get_or_create_user, record_attendance, force_mark_attendance
 from reports import (
@@ -27,8 +31,6 @@ from scheduler import get_attendance_window_status, set_group_chat_id
 from database import get_db, Settings
 from utils import format_user_name, get_phnom_penh_date
 from reports import get_fine_amount
-
-load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -340,13 +342,29 @@ def main():
         missing_vars.append("ADMIN_ID")
     
     if missing_vars:
+        # Check if we're in a container environment
+        in_container = os.path.exists('/.dockerenv') or os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('DYNO')
+        
         error_msg = (
-            f"❌ Missing required environment variables: {', '.join(missing_vars)}\n"
-            f"Please set these environment variables before starting the bot.\n"
-            f"For Docker: Use -e flags or environment file\n"
-            f"For Railway/Cloud: Set in your platform's environment variables\n"
-            f"See env.example for required variables."
+            f"❌ Missing required environment variables: {', '.join(missing_vars)}\n\n"
+            f"Please set these environment variables before starting the bot:\n"
         )
+        
+        if in_container:
+            error_msg += (
+                f"  • For Railway: Go to your project → Variables tab → Add:\n"
+                f"    - BOT_TOKEN=your_bot_token\n"
+                f"    - ADMIN_ID=your_telegram_user_id\n"
+                f"  • For Docker: Use -e flags: docker run -e BOT_TOKEN=... -e ADMIN_ID=...\n"
+            )
+        else:
+            error_msg += (
+                f"  • Create a .env file in the project root (see env.example)\n"
+                f"  • Or set them as system environment variables\n"
+            )
+        
+        error_msg += f"\nSee env.example for all required variables."
+        
         logger.error(error_msg)
         print(error_msg, file=sys.stderr)
         sys.exit(1)

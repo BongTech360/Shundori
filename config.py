@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 from datetime import time
 import pytz
 
-load_dotenv()
+# Load environment variables from .env file if it exists
+# This won't override existing environment variables (good for Docker/cloud)
+load_dotenv(override=False)
 
 # Telegram
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -17,7 +19,7 @@ except (ValueError, TypeError):
 
 # Database
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
-DATABASE_NAME = os.getenv('DATABASE_NAME', 'attendance_bot')
+DATABASE_NAME = os.getenv('DATABASE_NAME', 'BongTech_db')
 
 # Timezone
 TIMEZONE = pytz.timezone(os.getenv('TZ', 'Asia/Phnom_Penh'))
