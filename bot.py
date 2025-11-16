@@ -330,11 +330,26 @@ async def post_init(application: Application):
 
 def main():
     """Main entry point."""
-    if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN environment variable is not set")
+    import sys
     
+    # Check required environment variables
+    missing_vars = []
+    if not BOT_TOKEN:
+        missing_vars.append("BOT_TOKEN")
     if not ADMIN_ID:
-        raise ValueError("ADMIN_ID environment variable is not set")
+        missing_vars.append("ADMIN_ID")
+    
+    if missing_vars:
+        error_msg = (
+            f"❌ Missing required environment variables: {', '.join(missing_vars)}\n"
+            f"Please set these environment variables before starting the bot.\n"
+            f"For Docker: Use -e flags or environment file\n"
+            f"For Railway/Cloud: Set in your platform's environment variables\n"
+            f"See env.example for required variables."
+        )
+        logger.error(error_msg)
+        print(error_msg, file=sys.stderr)
+        sys.exit(1)
     
     # Create application
     application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
