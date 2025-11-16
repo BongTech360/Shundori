@@ -1,7 +1,7 @@
 """
 Database models and session management for the attendance bot.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -22,7 +22,7 @@ class User(Base):
     telegram_id = Column(Integer, unique=True, nullable=False, index=True)
     username = Column(String(255), nullable=True)
     full_name = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     is_active = Column(Boolean, default=True)
 
     # Relationships
@@ -42,7 +42,7 @@ class AttendanceRecord(Base):
     date = Column(Date, nullable=False, index=True)
     status = Column(String(20), nullable=False)  # 'present', 'absent', 'late'
     timestamp = Column(DateTime, nullable=True)  # When "1" was sent
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     user = relationship("User", back_populates="attendance_records")
@@ -59,7 +59,7 @@ class Fine(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     date = Column(Date, nullable=False, index=True)
     amount = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     user = relationship("User", back_populates="fines")

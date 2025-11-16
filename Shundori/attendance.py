@@ -50,10 +50,10 @@ def record_attendance(telegram_id: int, timestamp: datetime = None, username: st
     
     current_date = get_phnom_penh_date()
     
+    # Get or create user first (outside transaction to avoid nested contexts)
+    user = get_or_create_user(telegram_id, username=username, full_name=full_name)
+    
     with get_db() as db:
-        # Get or create user
-        user = get_or_create_user(telegram_id, username=username, full_name=full_name)
-        
         # Check if already recorded for today
         existing = db.query(AttendanceRecord).filter(
             AttendanceRecord.user_id == user.id,

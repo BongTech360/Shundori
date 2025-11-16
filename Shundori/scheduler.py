@@ -102,16 +102,37 @@ async def send_daily_report():
         logger.error(f"Failed to send daily report: {e}")
 
 
+# Global scheduler instance
+_scheduler_instance = None
+
 def setup_scheduler():
     """Setup and start the scheduler."""
-    scheduler = AsyncIOScheduler(timezone=TIMEZONE)
+    global _scheduler_instance
     
-    # Get times
+    if _scheduler_instance is not None and _scheduler_instance.running:
+        # Scheduler already running, just update jobs
+        update_scheduler_jobs(_scheduler_instance)
+        return _scheduler_instance
+    
+    _scheduler_instance = AsyncIOScheduler(timezone=TIMEZONE)
+    
+    # Initial setup
+    update_scheduler_jobs(_scheduler_instance)
+    
+    _scheduler_instance.start()
+    logger.info("Scheduler started")
+    
+    return _scheduler_instance
+
+
+def update_scheduler_jobs(scheduler):
+    """Update scheduled jobs with current times from database."""
+    # Get times (will read from database if available)
     window_start = get_window_start()
     window_end = get_window_end()
     report_time = get_report_time()
     
-    # Schedule window opening
+    # Update or add window opening job
     scheduler.add_job(
         open_attendance_window,
         trigger=CronTrigger(
@@ -123,7 +144,7 @@ def setup_scheduler():
         replace_existing=True
     )
     
-    # Schedule window closing
+    # Update or add window closing job
     scheduler.add_job(
         close_attendance_window,
         trigger=CronTrigger(
@@ -135,7 +156,7 @@ def setup_scheduler():
         replace_existing=True
     )
     
-    # Schedule daily report
+    # Update or add daily report job
     scheduler.add_job(
         send_daily_report,
         trigger=CronTrigger(
@@ -147,8 +168,5 @@ def setup_scheduler():
         replace_existing=True
     )
     
-    scheduler.start()
-    logger.info("Scheduler started")
-    
-    return scheduler
+    logger.info(f"Scheduler jobs updated: window {window_start} - {window_end}, report at {report_time}")
 

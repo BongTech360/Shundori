@@ -51,9 +51,16 @@ def generate_daily_report(report_date: date = None) -> Dict:
                     Fine.date == report_date
                 ).first()
                 
+                fine_amount_for_user = fine_amount
+                if fine:
+                    fine_amount_for_user = fine.amount
+                elif record and record.status == 'late':
+                    # Late users also get fined
+                    fine_amount_for_user = fine_amount
+                
                 absent_users.append({
                     'user': user,
-                    'fine': fine.amount if fine else fine_amount
+                    'fine': fine_amount_for_user
                 })
         
         # Calculate running fines
@@ -83,8 +90,13 @@ def format_daily_report_message(report: Dict, include_running_fines: bool = Fals
     if report['present']:
         for item in report['present']:
             user_name = format_user_name(item['user'])
-            timestamp = item['timestamp'].strftime('%H:%M:%S') if item['timestamp'] else 'N/A'
-            message += f"  • {user_name} ({timestamp})\n"
+            timestamp_str = 'N/A'
+            if item.get('timestamp'):
+                try:
+                    timestamp_str = item['timestamp'].strftime('%H:%M:%S')
+                except (AttributeError, TypeError):
+                    timestamp_str = 'N/A'
+            message += f"  • {user_name} ({timestamp_str})\n"
     else:
         message += "  None\n"
     

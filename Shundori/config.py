@@ -36,16 +36,40 @@ def parse_time(time_str: str) -> time:
 
 
 def get_window_start() -> time:
-    """Get attendance window start time."""
+    """Get attendance window start time from database or config."""
+    try:
+        from database import get_db, Settings
+        with get_db() as db:
+            setting = db.query(Settings).filter(Settings.key == 'window_start').first()
+            if setting:
+                return parse_time(setting.value)
+    except Exception:
+        pass
     return parse_time(ATTENDANCE_WINDOW_START)
 
 
 def get_window_end() -> time:
-    """Get attendance window end time."""
+    """Get attendance window end time from database or config."""
+    try:
+        from database import get_db, Settings
+        with get_db() as db:
+            setting = db.query(Settings).filter(Settings.key == 'window_end').first()
+            if setting:
+                return parse_time(setting.value)
+    except Exception:
+        pass
     return parse_time(ATTENDANCE_WINDOW_END)
 
 
 def get_report_time() -> time:
-    """Get daily report time."""
+    """Get daily report time from database or config."""
+    try:
+        from database import get_db, Settings
+        with get_db() as db:
+            setting = db.query(Settings).filter(Settings.key == 'report_time').first()
+            if setting:
+                return parse_time(setting.value)
+    except Exception:
+        pass
     return parse_time(REPORT_TIME)
 

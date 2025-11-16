@@ -97,14 +97,13 @@ async def handle_attendance_message(update: Update, context: ContextTypes.DEFAUL
         except TelegramError as e:
             logger.warning(f"Could not send private message to {telegram_id}: {e}")
             # Still record attendance, just notify admin
-            if is_admin(ADMIN_ID):
-                try:
-                    await context.bot.send_message(
-                        chat_id=ADMIN_ID,
-                        text=f"⚠️ Could not send greeting to {full_name} (ID: {telegram_id}). Attendance still recorded."
-                    )
-                except:
-                    pass
+            try:
+                await context.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"⚠️ Could not send greeting to {full_name} (ID: {telegram_id}). Attendance still recorded."
+                )
+            except Exception as admin_error:
+                logger.error(f"Could not notify admin: {admin_error}")
     else:
         await update.message.reply_text(message)
 
@@ -225,8 +224,17 @@ async def set_window_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         db.commit()
     
+    # Update scheduler with new times
+    try:
+        from scheduler import update_scheduler_jobs, _scheduler_instance
+        if _scheduler_instance and _scheduler_instance.running:
+            update_scheduler_jobs(_scheduler_instance)
+            logger.info("Scheduler updated with new window times")
+    except Exception as e:
+        logger.warning(f"Could not update scheduler: {e}")
+    
     await update.message.reply_text(
-        f"✅ Attendance window set to {context.args[0]} - {context.args[1]}"
+        f"✅ Attendance window set to {context.args[0]} - {context.args[1]}. Scheduler will use new times from tomorrow."
     )
 
 
