@@ -1,5 +1,4 @@
 # Railway ignore file
-nodejs/
 .git/
 __pycache__/
 *.pyc
@@ -14,8 +13,8 @@ exports/
 .env
 .env.local
 *.md
-tests/
 *.sh
 docker-compose.yml
-railway-env-vars.txt
+render.yaml
+test_*.py
 

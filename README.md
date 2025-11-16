@@ -1,2 +1,0 @@
-# Shundori
-Attendance Bot

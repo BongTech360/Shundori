@@ -2,11 +2,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -17,6 +12,6 @@ COPY . .
 # Create exports directory
 RUN mkdir -p exports
 
-# Run the bot
+# Run the bot (database initialization happens in bot.py post_init)
 CMD ["python", "bot.py"]
 
