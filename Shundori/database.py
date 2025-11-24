@@ -44,7 +44,7 @@ load_dotenv()
 
 # MongoDB connection
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
-DATABASE_NAME = os.getenv('DATABASE_NAME', 'BongTech_db')
+DATABASE_NAME = os.getenv('DATABASE_NAME', 'attendance_bot')
 
 _client: Optional[MongoClient] = None
 _db: Optional[Database] = None
@@ -196,7 +196,13 @@ class AttendanceRecord:
             'created_at': self.created_at
         }
         if self.timestamp:
-            doc['timestamp'] = self.timestamp
+            timestamp = self.timestamp
+            if timestamp.tzinfo is None:
+                # Assume naive timestamps are already UTC
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+            else:
+                timestamp = timestamp.astimezone(timezone.utc)
+            doc['timestamp'] = timestamp
         if self._id:
             doc['_id'] = self._id
         return doc

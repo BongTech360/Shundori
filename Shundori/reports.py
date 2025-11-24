@@ -1,8 +1,8 @@
 """
 Report generation and CSV export functionality.
 """
-from datetime import date, datetime
-from typing import List, Dict
+from datetime import date
+from typing import Dict
 import pandas as pd
 import os
 from database import get_db, User, AttendanceRecord, Fine, Settings

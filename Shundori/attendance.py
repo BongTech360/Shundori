@@ -2,10 +2,8 @@
 Attendance tracking logic.
 """
 from datetime import datetime, date
-from typing import Optional
-from database import get_db, User, AttendanceRecord, Fine, Settings
+from database import get_db, User, AttendanceRecord, Fine
 from utils import get_phnom_penh_now, get_phnom_penh_date, is_before_deadline, is_attendance_window_open
-from config import DEFAULT_FINE_AMOUNT
 from reports import get_fine_amount
 
 
@@ -91,7 +89,7 @@ def record_attendance(telegram_id: int, timestamp: datetime = None, username: st
         if is_on_time:
             return True, "Good morning! Attendance recorded."
         else:
-            return True, "Attendance recorded, but you were late. A fine has been applied."
+            return True, "Attendance recorded, but you were late. 20$ fine has been applied."
 
 
 def process_daily_attendance():

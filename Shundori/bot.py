@@ -11,7 +11,7 @@ from telegram.ext import (
     ContextTypes
 )
 from telegram.error import TelegramError
-from datetime import datetime, date
+from datetime import datetime
 import os
 from dotenv import load_dotenv
 
@@ -26,7 +26,6 @@ from reports import (
 from scheduler import get_attendance_window_status, set_group_chat_id
 from database import get_db, Settings
 from utils import format_user_name, get_phnom_penh_date
-from reports import get_fine_amount
 
 load_dotenv()
 

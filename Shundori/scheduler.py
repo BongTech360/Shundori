@@ -3,8 +3,6 @@ Scheduler for attendance window and daily reports.
 """
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
-import pytz
 from config import TIMEZONE, get_window_start, get_window_end, get_report_time
 from attendance import process_daily_attendance
 from reports import generate_daily_report, format_daily_report_message
